@@ -8,7 +8,7 @@ const state = {
   mode: null,
   peer: null,
   conn: null,
-  file: null,
+  files: [],
   code: "",
   token: "",
   joinToken: "",
@@ -136,8 +136,10 @@ function aboutPage() {
         <div><b>01</b><h3>Pick</h3><p>Choose a file on the sender device.</p></div>
         <div><b>02</b><h3>Connect</h3><p>Use a QR code, link, or six-digit code.</p></div>
         <div><b>03</b><h3>Transfer</h3><p>Watch live speed, progress and ETA.</p></div>
+        <div><b>04</b><h3>Save</h3><p>Click the download button to save the file on your device.</p></div>
       </div>
       ${featureStrip()}
+      <p class="developer-credit">Engineered by <b>Ayush Raj</b></p>
     </section>
   `);
   bindNav();
@@ -171,6 +173,10 @@ function home() {
   $("#receiverBtn").onclick = receiverPage;
 }
 
+function totalSize(files) {
+  return files.reduce((n, f) => n + f.size, 0);
+}
+
 function senderPicker() {
   state.mode = "sender";
   render(`
@@ -178,37 +184,64 @@ function senderPicker() {
     <section class="view page-content">
       <div class="page-head">
         <p class="eyebrow">SENDER</p>
-        <h2>Share your file</h2>
-        <p>Choose a file to send to another device.</p>
+        <h2>Share your files</h2>
+        <p>Choose one or more files to send to another device.</p>
       </div>
       <label class="dropzone" id="dropzone">
-        <input id="fileInput" type="file" hidden />
+        <input id="fileInput" type="file" multiple hidden />
         <div class="drop-icon">${icon("file")}</div>
-        <strong>Drag & drop your file here</strong>
+        <strong>Drag & drop your files here</strong>
         <span>or</span>
-        <button type="button" class="dark-mini" id="pickButton">Choose File</button>
+        <button type="button" class="dark-mini" id="pickButton">Choose Files</button>
       </label>
-      <div class="selected-file hidden" id="selectedFile"></div>
+      <div class="selected-file" id="selectedFile"></div>
       ${featureStrip()}
     </section>
   `);
   bindNav();
   const dz = $("#dropzone"), input = $("#fileInput");
   $("#pickButton").onclick = (e) => { e.preventDefault(); input.click(); };
-  input.onchange = () => input.files?.[0] && prepareSender(input.files[0]);
+  input.onchange = () => { addFiles(Array.from(input.files || [])); input.value = ""; };
   ["dragenter", "dragover"].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add("drag"); }));
   ["dragleave", "drop"].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove("drag"); }));
-  dz.addEventListener("drop", ev => ev.dataTransfer.files?.[0] && prepareSender(ev.dataTransfer.files[0]));
+  dz.addEventListener("drop", ev => addFiles(Array.from(ev.dataTransfer.files || [])));
+  renderSelectedFiles();
 }
 
-async function prepareSender(file) {
-  state.file = file;
+function addFiles(list) {
+  const added = list.filter(f => f && !state.files.some(x => x.name === f.name && x.size === f.size && x.lastModified === f.lastModified));
+  state.files.push(...added);
+  renderSelectedFiles();
+}
+
+function renderSelectedFiles() {
+  const box = $("#selectedFile");
+  if (!box) return;
+  if (!state.files.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `
+    <div class="file-list">
+      ${state.files.map((f, i) => `
+        <div class="file-row">
+          <div class="file-symbol">${icon("file")}</div>
+          <div><b>${escapeHtml(f.name)}</b><span>${formatBytes(f.size)}</span></div>
+          <button type="button" class="row-remove" data-remove="${i}" aria-label="Remove ${escapeHtml(f.name)}">✕</button>
+        </div>`).join("")}
+    </div>
+    <button type="button" class="primary-btn" id="shareBtn">Share ${state.files.length} file${state.files.length > 1 ? "s" : ""} · ${formatBytes(totalSize(state.files))} ${icon("arrow")}</button>
+  `;
+  box.querySelectorAll("[data-remove]").forEach(btn => {
+    btn.onclick = () => { state.files.splice(Number(btn.dataset.remove), 1); renderSelectedFiles(); };
+  });
+  $("#shareBtn").onclick = () => prepareSender(state.files);
+}
+
+async function prepareSender(files) {
   render(`
     <section class="view narrow">
-      <button class="back" id="back">← Change file</button>
+      <button class="back" id="back">← Change files</button>
       <div class="file-card large">
         <div class="file-symbol">${icon("file")}</div>
-        <div><b>${escapeHtml(file.name)}</b><span>${formatBytes(file.size)} · ${escapeHtml(file.type || "Unknown type")}</span></div>
+        <div><b>${files.length} file${files.length > 1 ? "s" : ""}</b><span>${formatBytes(totalSize(files))}</span></div>
       </div>
       <div class="loading-card">
         <div class="spinner"></div>
@@ -217,7 +250,7 @@ async function prepareSender(file) {
       </div>
     </section>
   `);
-  $("#back").onclick = senderPicker;
+  $("#back").onclick = () => { state.peer?.destroy(); senderPicker(); };
   await startSender();
 }
 
@@ -294,7 +327,7 @@ async function showSenderWaiting() {
     <section class="view page-content">
       <div class="page-head">
         <p class="eyebrow">SENDER</p>
-        <h2>File ready to share</h2>
+        <h2>Ready to share</h2>
         <p>Share the code or scan the QR to connect.</p>
       </div>
       <div class="ready-grid">
@@ -315,7 +348,7 @@ async function showSenderWaiting() {
       </div>
       <div class="file-status">
         <div class="file-symbol">${icon("file")}</div>
-        <div><b>${escapeHtml(state.file?.name || "File")}</b><span>${formatBytes(state.file?.size || 0)}</span></div>
+        <div><b>${state.files.length === 1 ? escapeHtml(state.files[0].name) : `${state.files.length} files`}</b><span>${formatBytes(totalSize(state.files))}</span></div>
         <div class="waiting-dot"><i></i>Waiting for receiver…</div>
       </div>
       ${featureStrip()}
@@ -331,7 +364,7 @@ function setupSenderConnection(conn) {
   conn.on("open", () => {
     state.connected = true;
     showTransfer("sender");
-    sendFile(conn, state.file);
+    sendFiles(conn, state.files);
   });
   conn.on("error", e => toast(e.message || "Connection failed.", "error"));
   conn.on("close", () => {
@@ -340,52 +373,61 @@ function setupSenderConnection(conn) {
   });
 }
 
-async function sendFile(conn, file) {
+async function sendFiles(conn, files) {
   const CHUNK = 128 * 1024;
-  let offset = 0;
+  const grandTotal = totalSize(files);
+  let sentBefore = 0;
   const started = performance.now();
   let lastUI = 0;
-  state.transfer = { total: file.size, transferred: 0, done: false, failed: false, meta: {
-    name: file.name,
-    size: file.size,
-    mime: file.type || "application/octet-stream"
-  }};
+  state.transfer = { total: grandTotal, transferred: 0, done: false, failed: false, meta: { name: "", size: grandTotal } };
 
   try {
     if (!conn.open) throw new Error("Connection is not open.");
-    conn.send({ type: "meta", ...state.transfer.meta });
+    conn.send({ type: "manifest", count: files.length, total: grandTotal });
 
-    while (offset < file.size) {
-      if (!conn.open) throw new Error("Receiver disconnected before the file finished sending.");
+    for (let idx = 0; idx < files.length; idx++) {
+      const file = files[idx];
+      let offset = 0;
+      state.transfer.meta = { name: file.name, size: grandTotal };
+      state.transfer.label = `File ${idx + 1} of ${files.length}`;
+      conn.send({ type: "meta", index: idx, count: files.length, name: file.name, size: file.size, mime: file.type || "application/octet-stream" });
 
-      while (conn.open && (conn.dataChannel?.bufferedAmount || 0) > 2 * 1024 * 1024) {
-        await new Promise(r => setTimeout(r, 20));
+      while (offset < file.size) {
+        if (!conn.open) throw new Error("Receiver disconnected before the files finished sending.");
+
+        while (conn.open && (conn.dataChannel?.bufferedAmount || 0) > 2 * 1024 * 1024) {
+          await new Promise(r => setTimeout(r, 20));
+        }
+        if (!conn.open) throw new Error("Receiver disconnected before the files finished sending.");
+
+        const end = Math.min(offset + CHUNK, file.size);
+        const buf = await file.slice(offset, end).arrayBuffer();
+        if (!conn.open) throw new Error("Receiver disconnected before the files finished sending.");
+        conn.send(buf);
+        offset = end;
+        state.transfer.transferred = sentBefore + offset;
+
+        const now = performance.now();
+        if (now - lastUI > 120) {
+          updateTransferUI(started, state.transfer);
+          lastUI = now;
+          await new Promise(r => setTimeout(r, 0));
+        }
       }
-      if (!conn.open) throw new Error("Receiver disconnected before the file finished sending.");
 
-      const end = Math.min(offset + CHUNK, file.size);
-      const buf = await file.slice(offset, end).arrayBuffer();
-      if (!conn.open) throw new Error("Receiver disconnected before the file finished sending.");
-      conn.send(buf);
-      offset = end;
-      state.transfer.transferred = offset;
-
-      const now = performance.now();
-      if (now - lastUI > 120) {
-        updateTransferUI(started, state.transfer);
-        lastUI = now;
-        await new Promise(r => setTimeout(r, 0));
-      }
+      sentBefore += file.size;
+      state.transfer.transferred = sentBefore;
+      conn.send({ type: "file-done", index: idx });
     }
 
-    if (!conn.open || state.transfer.transferred !== file.size) {
+    if (!conn.open || state.transfer.transferred !== grandTotal) {
       throw new Error("The connection closed before the transfer completed.");
     }
 
     conn.send({ type: "done" });
     state.transfer.done = true;
     updateTransferUI(started, state.transfer);
-    setTimeout(() => completePage(file, "sender"), 500);
+    setTimeout(() => completePage(files.map(f => ({ name: f.name, size: f.size })), "sender"), 500);
   } catch (error) {
     state.transfer.failed = true;
     toast(error.message || "Transfer failed.", "error");
@@ -495,60 +537,87 @@ async function joinSession(code) {
 }
 
 function setupReceiverConnection(conn) {
-  const chunks = [];
-  let meta = null;
-  let received = 0;
+  const received = [];          // finished files: { name, size, mime, blob }
+  let chunks = [];
+  let meta = null;              // current file meta
+  let fileReceived = 0;
+  let allReceived = 0;
+  let grandTotal = 0;
   let started = 0;
   let lastUI = 0;
+
+  const fail = (msg) => {
+    toast(msg, "error");
+    if (state.transfer) state.transfer.failed = true;
+    conn.close();
+  };
 
   conn.on("open", () => {
     state.connected = true;
     started = performance.now();
-    state.transfer = { total: 0, transferred: 0, done: false, chunks, meta };
+    state.transfer = { total: 0, transferred: 0, done: false, meta: null };
     showTransfer("receiver");
   });
 
   conn.on("data", data => {
+    if (data?.type === "manifest") {
+      grandTotal = data.total;
+      state.transfer.total = grandTotal;
+      state.transfer.meta = { name: `${data.count} file${data.count > 1 ? "s" : ""}`, size: grandTotal };
+      renderTransferStats("receiver", state.transfer.meta);
+      return;
+    }
     if (data?.type === "meta") {
       meta = data;
-      state.transfer.total = data.size;
-      state.transfer.meta = data;
-      renderTransferStats("receiver", meta);
+      chunks = [];
+      fileReceived = 0;
+      state.transfer.meta = { name: data.name, size: grandTotal || data.size };
+      state.transfer.label = `File ${data.index + 1} of ${data.count}`;
+      if (!grandTotal) state.transfer.total = data.size;
+      renderTransferStats("receiver", state.transfer.meta);
+      return;
+    }
+    if (data?.type === "file-done") {
+      if (!meta) return fail("Transfer ended before file information was received.");
+      if (fileReceived !== meta.size) {
+        return fail(`"${meta.name}" incomplete: received ${formatBytes(fileReceived)} of ${formatBytes(meta.size)}.`);
+      }
+      received.push({
+        name: meta.name,
+        size: meta.size,
+        mime: meta.mime,
+        blob: new Blob(chunks, { type: meta.mime || "application/octet-stream" })
+      });
+      chunks = [];
+      meta = null;
       return;
     }
     if (data?.type === "done") {
-      if (!meta) {
-        toast("Transfer ended before file information was received.", "error");
-        conn.close();
-        return;
-      }
-      if (received !== meta.size) {
-        toast(`Transfer incomplete: received ${formatBytes(received)} of ${formatBytes(meta.size)}.`, "error");
-        state.transfer.failed = true;
-        conn.close();
-        return;
-      }
-      const blob = new Blob(chunks, { type: meta.mime || "application/octet-stream" });
+      if (meta || !received.length) return fail("Transfer ended before all files were received.");
       state.transfer.done = true;
-      state.transfer.blob = blob;
+      state.transfer.files = received;
+      state.transfer.transferred = state.transfer.total;
       updateTransferUI(started, state.transfer);
-      setTimeout(() => completePage(meta, "receiver", blob), 350);
+      setTimeout(() => completePage(received, "receiver"), 350);
       return;
     }
+
+    let size = 0;
     if (data instanceof ArrayBuffer) {
       chunks.push(data);
-      received += data.byteLength;
+      size = data.byteLength;
     } else if (ArrayBuffer.isView(data)) {
-      const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-      chunks.push(buffer);
-      received += data.byteLength;
+      chunks.push(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+      size = data.byteLength;
     } else if (data instanceof Blob) {
       chunks.push(data);
-      received += data.size;
+      size = data.size;
     } else {
       return;
     }
-    state.transfer.transferred = received;
+    fileReceived += size;
+    allReceived += size;
+    state.transfer.transferred = allReceived;
     const now = performance.now();
     if (now - lastUI > 120) {
       updateTransferUI(started, state.transfer);
@@ -574,13 +643,13 @@ function showTransfer(role) {
     <section class="view page-content transfer-page">
       <div class="page-head center">
         <p class="eyebrow">${role === "sender" ? "SENDING" : "RECEIVING"}</p>
-        <h2 id="transferTitle">${role === "sender" ? "Sending file…" : "Receiving file…"}</h2>
+        <h2 id="transferTitle">${role === "sender" ? "Sending files…" : "Receiving files…"}</h2>
         <p>Keep this page open until the transfer is complete.</p>
       </div>
       <div class="transfer-card">
         <div class="transfer-file">
           <div class="file-symbol">${icon("file")}</div>
-          <div><b id="transferName">Preparing transfer…</b><span id="statSize">—</span></div>
+          <div><b id="transferName">Preparing transfer…</b><span><span id="statLabel"></span> <span id="statSize">—</span></span></div>
           <strong id="progressNumber">0%</strong>
         </div>
         <div class="progress-wrap"><div class="progress-bar"><div id="progressFill"></div></div></div>
@@ -613,9 +682,10 @@ function updateTransferUI(started, t) {
   const speed = transferred / elapsed;
   const pct = total ? Math.min(100, transferred / total * 100) : 0;
   const remaining = speed > 0 && total ? (total - transferred) / speed : Infinity;
-  const name = t.meta?.name || state.file?.name || "File";
+  const name = t.meta?.name || "File";
   const set = (id, value) => { const el = $(id); if (el) el.textContent = value; };
   set("#transferName", name);
+  set("#statLabel", t.label ? `${t.label} ·` : "");
   set("#statTransferred", `${formatBytes(transferred)} / ${formatBytes(total)}`);
   set("#statSpeed", `${formatBytes(speed)}/s`);
   set("#statEta", pct >= 100 ? "Done" : formatTime(remaining));
@@ -627,35 +697,48 @@ function updateTransferUI(started, t) {
   const fill = $("#progressFill"); if (fill) fill.style.width = `${pct}%`;
 }
 
-function completePage(data, role, blob = null) {
-  const name = typeof data === "string" ? data : data?.name || "File";
-  const size = typeof data === "object" ? data?.size : state.file?.size;
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function completePage(files, role) {
+  const n = files.length;
+  const plural = n > 1;
   render(`
     ${siteNav(role === "sender" ? "send" : "receive")}
     <section class="view page-content center complete">
-      <p class="eyebrow">${role === "sender" ? "TRANSFER COMPLETE" : "RECEIVING"}</p>
+      <p class="eyebrow">${role === "sender" ? "TRANSFER COMPLETE" : "RECEIVED"}</p>
       <div class="success-icon">${icon("check")}</div>
-      <h2>${role === "sender" ? "File sent successfully." : "File received!"}</h2>
-      <p class="complete-sub">${role === "sender" ? "The file has been transferred successfully." : "The file has been transferred successfully."}</p>
-      <div class="complete-card">
-        <div class="file-symbol">${icon("file")}</div>
-        <div><b>${escapeHtml(name)}</b><span>${formatBytes(size || 0)}</span></div>
-        ${role === "receiver" ? `<button class="primary-btn" id="download">Download File ${icon("arrow")}</button>` : ""}
-        <div class="complete-banner"><span class="check-small">✓</span><div><b>Transfer completed</b><small>${role === "receiver" ? "You can now download the file to your device." : "The receiver can now use the transferred file."}</small></div></div>
+      <h2>${role === "sender" ? (plural ? `${n} files sent successfully.` : "File sent successfully.") : (plural ? `${n} files received!` : "File received!")}</h2>
+      <p class="complete-sub">The ${plural ? "files have" : "file has"} been transferred successfully.</p>
+      <div class="complete-list">
+        ${files.map((f, i) => `
+          <div class="complete-card">
+            <div class="file-symbol">${icon("file")}</div>
+            <div><b>${escapeHtml(f.name)}</b><span>${formatBytes(f.size || 0)}</span></div>
+            ${role === "receiver" ? `<button class="primary-btn" data-dl="${i}">Download ${icon("arrow")}</button>` : ""}
+          </div>`).join("")}
+        ${role === "receiver" && plural ? `<button class="primary-btn" id="dlAll">Download all ${n} files ${icon("arrow")}</button>` : ""}
+        <div class="complete-banner"><span class="check-small">✓</span><div><b>Transfer completed</b><small>${role === "receiver" ? "You can now download the files to your device." : "The receiver can now use the transferred files."}</small></div></div>
       </div>
       <button class="text-btn" id="doneBtn">Done</button>
     </section>
   `);
   bindNav();
   if (role === "receiver") {
-    $("#download").onclick = () => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = name; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    };
+    document.querySelectorAll("[data-dl]").forEach(btn => {
+      btn.onclick = () => { const f = files[Number(btn.dataset.dl)]; downloadBlob(f.blob, f.name); };
+    });
+    $("#dlAll")?.addEventListener("click", () => {
+      // stagger so browsers don't block multiple downloads
+      files.forEach((f, i) => setTimeout(() => downloadBlob(f.blob, f.name), i * 400));
+    });
   }
   $("#doneBtn").onclick = () => {
+    state.files = [];
     state.peer?.destroy();
     state.conn?.close();
     closeSession().finally(home);
