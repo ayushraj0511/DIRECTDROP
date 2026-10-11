@@ -170,7 +170,7 @@ function aboutPage() {
         <div><b>01</b><h3>Pick</h3><p>Choose one or more files on the sender device.</p></div>
         <div><b>02</b><h3>Connect</h3><p>Use a QR code, link, or six-digit code.</p></div>
         <div><b>03</b><h3>Transfer</h3><p>Watch live speed, progress and ETA.</p></div>
-        <div><b>04</b><h3>Download</h3><p>Click the download button to save the files on your device.</p></div>
+        <div><b>04</b><h3>Save</h3><p>Click the download button to save the files on your device.</p></div>
       </div>
       ${featureStrip()}
       <p class="developer-credit">Engineered by <b>Ayush Raj</b></p>
