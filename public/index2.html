@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0d16" />
+    <link rel="icon" type="image/jpeg" href="/logo2.jpeg" />
+    <script>
+      try {
+        var t = localStorage.getItem("directdrop-theme");
+        document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+      } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+    </script>
+    <meta name="description" content="Direct Drop — fast, private, peer-to-peer file transfer." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Hanken+Grotesk:wght@400..700&display=swap" rel="stylesheet" />
+    <title>DIRECTDROP — Move files. Directly.</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main2.js"></script>
+  </body>
+</html>
